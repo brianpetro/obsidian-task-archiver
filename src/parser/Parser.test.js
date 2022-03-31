@@ -85,6 +85,11 @@ describe("Headings", () => {
     });
 });
 
+function assertParseResult(lines, result, settings = DEFAULT_SETTINGS) {
+    const doc = parse(lines, settings);
+    expect(doc.blockContent.children).toMatchObject(result);
+}
+
 describe("List items", () => {
     test("Indented text after a list item gets nested", () => {
         const lines = ["- l", "\ttext"];
@@ -131,20 +136,22 @@ describe("List items", () => {
     });
 
     test("A top-level line breaks out of a list context", () => {
-        const lines = ["- l", "\t- l2", "line"];
-        expect(parse(lines).blockContent.children).toMatchObject([
-            {
-                text: "- l",
-                children: [
-                    {
-                        text: "- l2",
-                    },
-                ],
-            },
-            {
-                text: "line",
-            },
-        ]);
+        assertParseResult(
+            ["- l", "\t- l2", "line"],
+            [
+                {
+                    text: "- l",
+                    children: [
+                        {
+                            text: "- l2",
+                        },
+                    ],
+                },
+                {
+                    text: "line",
+                },
+            ]
+        );
     });
 
     test.each([
@@ -163,7 +170,7 @@ describe("List items", () => {
         ["Numbers", ["1. l", "\t11. l2", "\t\ttext"]],
         ["Mixed", ["1. l", "\t* l2", "\t\ttext"]],
     ])("Different types of list markers: %s", (message, lines) => {
-        expect(parse(lines).blockContent.children).toMatchObject([
+        assertParseResult(lines, [
             {
                 text: expect.stringContaining("l"),
                 children: [
@@ -181,20 +188,19 @@ describe("List items", () => {
     });
 
     test("Handles misaligned lists", () => {
-        const lines = ["- l", "  - text"];
-
-        const doc = parse(lines, { useTab: false, tabSize: 4 });
-
-        expect(doc.blockContent.children).toMatchObject([
-            {
-                text: "- l",
-                children: [
-                    {
-                        text: "- text",
-                    },
-                ],
-            },
-        ]);
+        assertParseResult(
+            ["- l", "  - text"],
+            [
+                {
+                    text: "- l",
+                    children: [
+                        {
+                            text: "- text",
+                        },
+                    ],
+                },
+            ]
+        );
     });
 
     test("Handles indentation detection when tabs get mixed with spaces (the number of spaces matches the config)", () => {
