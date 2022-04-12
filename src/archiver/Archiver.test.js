@@ -778,7 +778,31 @@ describe("Turn list items into headings", () => {
         expect(fileContents.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
     });
 
-    test.todo("Respects indentation settings");
+    test("Respects indentation settings", () => {
+        const archiver = buildArchiver(["- li 1", "    - li 2", "        - li 3"], {
+            ...DEFAULT_SETTINGS,
+            indentationSettings: {
+                useTabs: false,
+                tabSize: 4,
+            },
+        });
+
+        archiver.turnListItemsIntoHeadings({
+            ...editor,
+            getCursor: () => {
+                return { line: 2, ch: 0 };
+            },
+        });
+
+        expect(fileContents.get(activeFile)).toEqual([
+            "# li 1",
+            "",
+            "## li 2",
+            "",
+            "### li 3",
+            "",
+        ]);
+    });
 
     test.todo("Tasks in list");
     test.todo("Numbered list");

@@ -13,9 +13,10 @@ import {
     detectListUnderCursor,
     isCompletedTask,
     normalizeNewlinesRecursively,
-} from "../util";
+} from "../Util";
 import { ActiveFile, DiskFile, EditorFile } from "./ActiveFile";
 import { isEmpty } from "lodash";
+import { BlockParser } from "../parser/BlockParser";
 
 type TreeEditorCallback = (tree: Section) => void;
 
@@ -92,7 +93,7 @@ export class Archiver {
         const newSectionRoot = Archiver.buildSectionFromList(parsedRoot.blockContent);
         Archiver.replaceChildBlocksWithChildSectionsRecursively(
             newSectionRoot,
-            Archiver.getDepthOfLineUnderCursor(editor)
+            this.getDepthOfLineUnderCursor(editor)
         );
 
         const newHeadingDepth = this.getHeadingLevelUnderCursor(editor);
@@ -109,10 +110,12 @@ export class Archiver {
         editor.replaceRange(newListLines, ...thisListRange);
     }
 
-    private static getDepthOfLineUnderCursor(editor: Editor) {
+    private getDepthOfLineUnderCursor(editor: Editor) {
         const line = editor.getLine(editor.getCursor().line);
-        const [, indentation] = /^(\t*)/.exec(line);
-        return indentation.length;
+        // TODO: kludge. This is not a good reason to create a parser
+        return new BlockParser(this.settings.indentationSettings).getIndentationLevel(
+            line
+        );
     }
 
     private static buildSectionFromList(listRoot: Block) {
@@ -126,7 +129,7 @@ export class Archiver {
     private static replaceChildBlocksWithChildSectionsRecursively(
         section: Section,
         maxReplacementDepth: number,
-        currentDepth: number = 0
+        currentDepth: number = 1 // TODO: again, implicit knowledge about levels
     ) {
         if (currentDepth > maxReplacementDepth) {
             return;

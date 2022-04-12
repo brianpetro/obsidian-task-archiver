@@ -2,9 +2,11 @@ import { ArchiverSettings } from "./ArchiverSettings";
 import { Block } from "../model/Block";
 import { ListBlock } from "../model/ListBlock";
 import { IndentationSettings } from "./IndentationSettings";
-import {addSurroundingNewlines, findBlockRecursively, stripSurroundingNewlines} from "../util";
-import { chain } from "lodash";
-import { TextBlock } from "../model/TextBlock";
+import {
+    addSurroundingNewlines,
+    findBlockRecursively,
+    stripSurroundingNewlines,
+} from "../Util";
 
 type DateLevel = "years" | "months" | "weeks" | "days";
 
