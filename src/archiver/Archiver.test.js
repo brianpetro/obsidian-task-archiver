@@ -804,8 +804,28 @@ describe("Turn list items into headings", () => {
         ]);
     });
 
-    test.todo("Tasks in list");
-    test.todo("Numbered list");
-    test.todo("Different list tokens");
+    test("Tasks in list", () => {
+        const archiver = buildArchiver(["- [x] li"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
+    });
+
+    test("Numbered lists", () => {
+        const archiver = buildArchiver(["11. li"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
+    });
+
+    test("Different list tokens", () => {
+        const archiver = buildArchiver(["* li", "\t+ li 2"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li", "", "+ li 2", ""]);
+    });
     test.todo("Code blocks after list items");
 });

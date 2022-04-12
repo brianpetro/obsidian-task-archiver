@@ -121,8 +121,12 @@ export class Archiver {
     private static buildSectionFromList(listRoot: Block) {
         const newBlockContent = new RootBlock();
         newBlockContent.children = listRoot.children;
+        // TODO: this regex is out of place
+        const sectionText = listRoot.text.replace(
+            /^(?<bullet>[-*+]|\d+\.)(?<task> \[[x ]])?/,
+            ""
+        );
         // TODO: root has level 0, this is implicit
-        const sectionText = listRoot.text.replace(/^-/, "");
         return new Section(sectionText, 0, newBlockContent);
     }
 
