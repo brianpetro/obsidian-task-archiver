@@ -111,10 +111,9 @@ async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
 
 describe("Moving top-level tasks to the archive", () => {
     test("Only normalizes whitespace when there are no completed tasks", async () => {
-        // TODO: no need for these newlines
         await archiveTasksAndCheckActiveFile(
             ["foo", "bar", "# Archived"],
-            ["foo", "bar", "# Archived", "", ""]
+            ["foo", "bar", "# Archived", ""]
         );
     });
 
@@ -639,11 +638,150 @@ describe("Sort tasks in list under cursor recursively", () => {
 });
 
 describe("Turn list items into headings", () => {
-    test("Simplest case", () => {
+    test("No list under cursor", () => {
+        const archiver = buildArchiver(["text"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["text"]);
+    });
+
+    test("Single list line", () => {
         const archiver = buildArchiver(["- li"]);
 
         archiver.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li"]);
+        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
     });
+
+    test("One level of nesting, cursor at line 0", () => {
+        const archiver = buildArchiver(["- li", "\t- li 2"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li", "", "- li 2", ""]);
+    });
+
+    test("One level of nesting, cursor at nested list line", () => {
+        const archiver = buildArchiver(["- li", "\t- li 2"]);
+
+        archiver.turnListItemsIntoHeadings({
+            ...editor,
+            getCursor: () => {
+                return { line: 1, ch: 0 };
+            },
+        });
+
+        expect(fileContents.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
+    });
+
+    test("Multiple levels of nesting, cursor in mid depth", () => {
+        const archiver = buildArchiver([
+            "- li 1",
+            "\t- li 2",
+            "\t\t- li 3",
+            "\t\t\t\t- li 4",
+            "\t\t\t\t\t- li 6",
+        ]);
+
+        archiver.turnListItemsIntoHeadings({
+            ...editor,
+            getCursor: () => {
+                return { line: 2, ch: 0 };
+            },
+        });
+
+        expect(fileContents.get(activeFile)).toEqual([
+            "# li 1",
+            "",
+            "## li 2",
+            "",
+            "### li 3",
+            "",
+            "- li 4",
+            "\t- li 6",
+            "",
+        ]);
+    });
+
+    test("Heading above list determines starting depth", () => {
+        const archiver = buildArchiver(["# h 1", "", "- li 1"]);
+
+        archiver.turnListItemsIntoHeadings({
+            ...editor,
+            getCursor: () => {
+                return { line: 2, ch: 0 };
+            },
+        });
+
+        expect(fileContents.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
+    });
+
+    test("Text after list item", () => {
+        const archiver = buildArchiver([
+            "- li 1",
+            "  Text content 1",
+            "  Text content 2",
+        ]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual([
+            "# li 1",
+            "",
+            "Text content 1",
+            "Text content 2",
+            "",
+        ]);
+    });
+
+    test("Text after deeply nested list item", () => {
+        const archiver = buildArchiver([
+            "- li 1",
+            "\t- li 2",
+            "\t\t- li 3",
+            "\t\t\t- li 4",
+            "\t\t\t  Text content 1",
+            "\t\t\t  Text content 2",
+        ]);
+
+        archiver.turnListItemsIntoHeadings({
+            ...editor,
+            getCursor: () => {
+                return { line: 3, ch: 0 };
+            },
+        });
+
+        expect(fileContents.get(activeFile)).toEqual([
+            "# li 1",
+            "",
+            "## li 2",
+            "",
+            "### li 3",
+            "",
+            "#### li 4",
+            "",
+            "Text content 1",
+            "Text content 2",
+            "",
+        ]);
+    });
+
+    test("Respects newline settings", () => {
+        const archiver = buildArchiver(["- li 1", "\t- li 2", "\t\t- li 3"], {
+            ...DEFAULT_SETTINGS,
+            addNewlinesAroundHeadings: false,
+        });
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
+    });
+
+    test.todo("Respects indentation settings");
+
+    test.todo("Tasks in list");
+    test.todo("Numbered list");
+    test.todo("Different list tokens");
+    test.todo("Code blocks after list items");
 });

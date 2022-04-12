@@ -12,8 +12,10 @@ import {
     detectHeadingUnderCursor,
     detectListUnderCursor,
     isCompletedTask,
+    normalizeNewlinesRecursively,
 } from "../util";
 import { ActiveFile, DiskFile, EditorFile } from "./ActiveFile";
+import { isEmpty } from "lodash";
 
 type TreeEditorCallback = (tree: Section) => void;
 
@@ -39,16 +41,14 @@ export class Archiver {
             this.archiveBlocksToRoot(tasks, tree)
         );
 
-        return tasks.length === 0
+        return isEmpty(tasks)
             ? "No tasks to archive"
             : `Archived ${tasks.length} tasks`;
     }
 
     async deleteTasksInActiveFile(file: ActiveFile) {
         const tasks = await this.extractTasksFromActiveFile(file);
-        return tasks.length === 0
-            ? "No tasks to delete"
-            : `Deleted ${tasks.length} tasks`;
+        return isEmpty(tasks) ? "No tasks to delete" : `Deleted ${tasks.length} tasks`;
     }
 
     async archiveHeadingUnderCursor(editor: Editor) {
@@ -89,26 +89,72 @@ export class Archiver {
         const thisListLines = editor.getRange(...thisListRange).split("\n");
 
         const parsedRoot = this.parser.parse(thisListLines);
-        const newRoot = Archiver.buildHeadingFromListRoot(parsedRoot.blockContent);
+        const newSectionRoot = Archiver.buildSectionFromList(parsedRoot.blockContent);
+        Archiver.replaceChildBlocksWithChildSectionsRecursively(
+            newSectionRoot,
+            Archiver.getDepthOfLineUnderCursor(editor)
+        );
 
-        const newRootChildBlocks = newRoot.blockContent.children;
-        for (const [i, child] of newRootChildBlocks.entries()) {
-            newRootChildBlocks[i] = Archiver.buildHeadingFromListRoot(child);
+        const newHeadingDepth = this.getHeadingLevelUnderCursor(editor);
+        newSectionRoot.recalculateTokenLevels(newHeadingDepth);
+
+        if (this.settings.addNewlinesAroundHeadings) {
+            normalizeNewlinesRecursively(newSectionRoot);
         }
 
-        const newListLines = newRoot
+        const newListLines = newSectionRoot
             .stringify(buildIndentation(this.settings.indentationSettings))
             .join("\n");
 
         editor.replaceRange(newListLines, ...thisListRange);
     }
 
-    private static buildHeadingFromListRoot(listRoot: Block, maxNesting = 3) {
+    private static getDepthOfLineUnderCursor(editor: Editor) {
+        const line = editor.getLine(editor.getCursor().line);
+        const [, indentation] = /^(\t*)/.exec(line);
+        return indentation.length;
+    }
+
+    private static buildSectionFromList(listRoot: Block) {
         const newBlockContent = new RootBlock();
         newBlockContent.children = listRoot.children;
         // TODO: root has level 0, this is implicit
         const sectionText = listRoot.text.replace(/^-/, "");
-        return new Section(sectionText, 1, newBlockContent);
+        return new Section(sectionText, 0, newBlockContent);
+    }
+
+    private static replaceChildBlocksWithChildSectionsRecursively(
+        section: Section,
+        maxReplacementDepth: number,
+        currentDepth: number = 0
+    ) {
+        if (currentDepth > maxReplacementDepth) {
+            return;
+        }
+        for (const blockChild of section.blockContent.children) {
+            section.appendChild(Archiver.buildSectionFromList(blockChild));
+        }
+        section.blockContent.children = [];
+
+        for (const child of section.children) {
+            Archiver.replaceChildBlocksWithChildSectionsRecursively(
+                child,
+                maxReplacementDepth,
+                currentDepth + 1
+            );
+        }
+    }
+
+    private getHeadingLevelUnderCursor(editor: Editor) {
+        const headingUnderCursor = detectHeadingUnderCursor(editor);
+        if (headingUnderCursor === null) {
+            return 0;
+        }
+        const emptyRootSectionUnderCursor = this.parser.parse(
+            editor.getRange(...headingUnderCursor).split("\n")
+        );
+        const actualSectionUnderCursor = emptyRootSectionUnderCursor.children[0];
+        return actualSectionUnderCursor.tokenLevel;
     }
 
     private async getArchiveFile(activeFile: ActiveFile) {
