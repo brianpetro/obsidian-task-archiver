@@ -10,6 +10,7 @@ import {
     buildHeadingPattern,
     buildIndentation,
     detectHeadingUnderCursor,
+    detectListUnderCursor,
     isCompletedTask,
 } from "../util";
 import { ActiveFile, DiskFile, EditorFile } from "./ActiveFile";
@@ -77,6 +78,37 @@ export class Archiver {
             section.recalculateTokenLevels(archiveHeadingLevel + 1);
             archiveSection.appendChild(section);
         });
+    }
+
+    turnListItemsIntoHeadings(editor: Editor) {
+        const thisListRange = detectListUnderCursor(editor);
+        if (thisListRange === null) {
+            return;
+        }
+
+        const thisListLines = editor.getRange(...thisListRange).split("\n");
+
+        const parsedRoot = this.parser.parse(thisListLines);
+        const newRoot = Archiver.buildHeadingFromListRoot(parsedRoot.blockContent);
+
+        const newRootChildBlocks = newRoot.blockContent.children;
+        for (const [i, child] of newRootChildBlocks.entries()) {
+            newRootChildBlocks[i] = Archiver.buildHeadingFromListRoot(child);
+        }
+
+        const newListLines = newRoot
+            .stringify(buildIndentation(this.settings.indentationSettings))
+            .join("\n");
+
+        editor.replaceRange(newListLines, ...thisListRange);
+    }
+
+    private static buildHeadingFromListRoot(listRoot: Block, maxNesting = 3) {
+        const newBlockContent = new RootBlock();
+        newBlockContent.children = listRoot.children;
+        // TODO: root has level 0, this is implicit
+        const sectionText = listRoot.text.replace(/^-/, "");
+        return new Section(sectionText, 1, newBlockContent);
     }
 
     private async getArchiveFile(activeFile: ActiveFile) {

@@ -90,7 +90,7 @@ async function archiveCompletedTasks(input, settings = DEFAULT_SETTINGS) {
     return await archiver.archiveTasksInActiveFile(new EditorFile(editor));
 }
 
-function buildArchiver(input, settings) {
+function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     // TODO: this is out of place
     fileContents.set(activeFile, input);
     fileContents.set(archive, [""]);
@@ -635,5 +635,15 @@ describe("Sort tasks in list under cursor recursively", () => {
                 "  text under list item 2",
             ]
         );
+    });
+});
+
+describe("Turn list items into headings", () => {
+    test("Simplest case", () => {
+        const archiver = buildArchiver(["- li"]);
+
+        archiver.turnListItemsIntoHeadings(editor);
+
+        expect(fileContents.get(activeFile)).toEqual(["# li"]);
     });
 });

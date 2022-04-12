@@ -73,6 +73,13 @@ export default class ObsidianTaskArchiver extends Plugin {
                 this.sorter.sortListUnderCursor(editor);
             },
         });
+        this.addCommand({
+            id: "turn-list-items-into-headings",
+            name: "Turn list items at this level into headings",
+            editorCallback: (editor) => {
+                this.archiver.turnListItemsIntoHeadings(editor);
+            },
+        });
     }
 
     async loadSettings() {
