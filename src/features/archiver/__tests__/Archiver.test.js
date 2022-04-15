@@ -10,7 +10,7 @@ import { ListToHeadingTransformer } from "../../ListToHeadingTransformer";
 window.moment = moment;
 const WEEK = "2021-01-W-1";
 const DAY = "2021-01-01";
-Date.now = jest.fn(() => new Date(DAY).valueOf());
+Date.now = () => new Date(DAY).getTime();
 
 jest.mock("obsidian");
 
@@ -30,52 +30,113 @@ const DEFAULT_SETTINGS = {
     defaultArchiveFileName: "<filename> (archive)",
 };
 
-const fileContents = new Map();
-const activeFile = {
-    extension: "md",
-};
-const TFileMock = jest.requireMock("obsidian").TFile;
-const archive = Object.assign(Object.create(TFileMock.prototype), {
-    extension: "md",
-});
+const vaultState = new Map();
+const activeFile = buildMarkdownTFile();
+const archiveFile = buildMarkdownTFile();
 
-const vault = {
-    read: (file) => fileContents.get(file).join("\n"),
-    modify: (file, contents) => fileContents.set(file, contents.split("\n")),
-    getAbstractFileByPath: () => archive,
-};
+class MockVault {
+    constructor(vaultState) {
+        this.vaultState = vaultState;
+    }
+
+    read(file) {
+        return this.vaultState.get(file).join("\n");
+    }
+
+    modify(file, contents) {
+        this.vaultState.set(file, contents.split("\n"));
+    }
+
+    getAbstractFileByPath() {
+        return archiveFile;
+    }
+}
+
+const vault = new MockVault(vaultState);
 
 const workspace = {
     getActiveFile: () => activeFile,
 };
 
-// todo: too much fileContents.get(activeFile)
+// todo: too much vaultState.get(activeFile)
+
+class MockEditor {
+    constructor(vaultState) {
+        this.vaultState = vaultState;
+    }
+
+    getValue() {
+        return this.vaultState.get(activeFile).join("\n");
+    }
+
+    setValue(value) {
+        this.vaultState.set(activeFile, value.split("\n"));
+    }
+
+    getCursor() {
+        return {
+            line: 0,
+            ch: 0,
+        };
+    }
+
+    getLine(n) {
+        return this.vaultState.get(activeFile)[n];
+    }
+
+    lastLine() {
+        return this.vaultState.get(activeFile).length - 1;
+    }
+
+    getRange(from, to) {
+        return this.vaultState
+            .get(activeFile)
+            .slice(from.line, to.line + 1)
+            .join("\n");
+    }
+
+    replaceRange(replacement, from, to) {
+        return this.vaultState
+            .get(activeFile)
+            .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
+    }
+}
+
 const editor = {
-    getValue: () => fileContents.get(activeFile).join("\n"),
-    setValue: (value) => fileContents.set(activeFile, value.split("\n")),
+    getValue: () => vaultState.get(activeFile).join("\n"),
+    setValue: (value) => vaultState.set(activeFile, value.split("\n")),
     getCursor: () => {
         return {
             line: 0,
             ch: 0,
         };
     },
-    getLine: (n) => fileContents.get(activeFile)[n],
-    lastLine: () => fileContents.get(activeFile).length - 1,
+    getLine: (n) => vaultState.get(activeFile)[n],
+    lastLine: () => vaultState.get(activeFile).length - 1,
     getRange: (from, to) =>
-        fileContents
+        vaultState
             .get(activeFile)
             .slice(from.line, to.line + 1)
             .join("\n"),
     replaceRange: (replacement, from, to) => {
-        fileContents
+        vaultState
             .get(activeFile)
             .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
     },
 };
 
 beforeEach(() => {
-    fileContents.clear();
+    vaultState.clear();
 });
+
+function buildMarkdownTFile() {
+    // This is needed pass `instanceof` checks
+    const TFile = jest.requireMock("obsidian").TFile;
+    const file = Object.create(TFile.prototype);
+
+    file.extension = "md";
+    return file;
+}
 
 async function archiveTasksAndCheckActiveFile(
     input,
@@ -83,7 +144,7 @@ async function archiveTasksAndCheckActiveFile(
     settings = DEFAULT_SETTINGS
 ) {
     await archiveCompletedTasks(input, settings);
-    expect(fileContents.get(activeFile)).toEqual(expectedOutput);
+    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
 }
 
 async function archiveCompletedTasks(input, settings = DEFAULT_SETTINGS) {
@@ -93,8 +154,8 @@ async function archiveCompletedTasks(input, settings = DEFAULT_SETTINGS) {
 
 function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     // TODO: this is out of place
-    fileContents.set(activeFile, input);
-    fileContents.set(archive, [""]);
+    vaultState.set(activeFile, input);
+    vaultState.set(archiveFile, [""]);
 
     return new Archiver(
         vault,
@@ -110,13 +171,25 @@ async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
     return await archiver.deleteTasksInActiveFile(new EditorFile(editor));
 }
 
+function testFnAsyncArchiveTasksAndCheckActiveFile(
+    input,
+    expectedOutput,
+    settings = DEFAULT_SETTINGS
+) {
+    return async () => {
+        await archiveCompletedTasks(input, settings);
+        expect(vaultState.get(activeFile)).toEqual(expectedOutput);
+    };
+}
+
 describe("Moving top-level tasks to the archive", () => {
-    test("Only normalizes whitespace when there are no completed tasks", async () => {
-        await archiveTasksAndCheckActiveFile(
+    test(
+        "Only normalizes whitespace when there are no completed tasks",
+        testFnAsyncArchiveTasksAndCheckActiveFile(
             ["foo", "bar", "# Archived"],
             ["foo", "bar", "# Archived", ""]
-        );
-    });
+        )
+    );
 
     test("Moves a single task to an empty archive", async () => {
         await archiveTasksAndCheckActiveFile(
@@ -293,7 +366,7 @@ describe("Deleting completed tasks", () => {
 
         await deleteCompletedTasks(input);
 
-        expect(fileContents.get(activeFile)).toEqual(["- [ ] bar"]);
+        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
     });
 });
 
@@ -306,8 +379,8 @@ describe("Separate files", () => {
             archiveToSeparateFile: true,
         });
 
-        expect(fileContents.get(activeFile)).toEqual(["- [ ] bar"]);
-        expect(fileContents.get(archive)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
+        expect(vaultState.get(archiveFile)).toEqual([
             "",
             "# Archived",
             "",
@@ -482,7 +555,7 @@ async function archiveHeadingAndCheckActiveFile(
 ) {
     await archiveHeading(input, settings);
 
-    expect(fileContents.get(activeFile)).toEqual(expectedOutput);
+    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
 }
 
 async function archiveHeading(input, settings) {
@@ -517,7 +590,7 @@ describe("Archive heading under cursor", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual([
             "# h1",
             "",
             "# Archived",
@@ -538,7 +611,7 @@ describe("Archive heading under cursor", () => {
         });
 
         // TODO: whitespace inconsistency
-        expect(fileContents.get(archive)).toEqual(["", "# Archived", "## h1"]);
+        expect(vaultState.get(archiveFile)).toEqual(["", "# Archived", "## h1"]);
     });
 });
 
@@ -551,11 +624,11 @@ function sortListUnderCursorAndCheckActiveFile(
 
     taskListSorter.sortListUnderCursor(editor);
 
-    expect(fileContents.get(activeFile)).toEqual(expectedOutput);
+    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
 }
 
 function buildTaskListSorter(input, settings) {
-    fileContents.set(activeFile, input);
+    vaultState.set(activeFile, input);
 
     return new TaskListSorter(
         new SectionParser(new BlockParser(settings.indentationSettings)),
@@ -644,7 +717,7 @@ describe("Sort tasks in list under cursor recursively", () => {
 
 function buildListToHeadingTransformer(input, settings = DEFAULT_SETTINGS) {
     // TODO: this is out of place
-    fileContents.set(activeFile, input);
+    vaultState.set(activeFile, input);
 
     return new ListToHeadingTransformer(
         new SectionParser(new BlockParser(settings.indentationSettings)),
@@ -658,7 +731,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["text"]);
+        expect(vaultState.get(activeFile)).toEqual(["text"]);
     });
 
     test("Single list line", () => {
@@ -666,7 +739,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
 
     test("One level of nesting, cursor at line 0", () => {
@@ -677,7 +750,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", "", "- li 2", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", "", "- li 2", ""]);
     });
 
     test("One level of nesting, cursor at nested list line", () => {
@@ -693,7 +766,7 @@ describe("Turn list items into headings", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
     });
 
     test("Multiple levels of nesting, cursor in mid depth", () => {
@@ -712,7 +785,7 @@ describe("Turn list items into headings", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
             "",
             "## li 2",
@@ -739,7 +812,7 @@ describe("Turn list items into headings", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
     });
 
     test("Text after list item", () => {
@@ -751,7 +824,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
             "",
             "Text content 1",
@@ -777,7 +850,7 @@ describe("Turn list items into headings", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
             "",
             "## li 2",
@@ -803,7 +876,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
+        expect(vaultState.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
     });
 
     test("Respects indentation settings", () => {
@@ -825,7 +898,7 @@ describe("Turn list items into headings", () => {
             },
         });
 
-        expect(fileContents.get(activeFile)).toEqual([
+        expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
             "",
             "## li 2",
@@ -840,7 +913,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
 
     test("Numbered lists", () => {
@@ -848,7 +921,7 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
 
     test("Different list tokens", () => {
@@ -859,6 +932,6 @@ describe("Turn list items into headings", () => {
 
         listToHeadingTransformer.turnListItemsIntoHeadings(editor);
 
-        expect(fileContents.get(activeFile)).toEqual(["# li", "", "+ li 2", ""]);
+        expect(vaultState.get(activeFile)).toEqual(["# li", "", "+ li 2", ""]);
     });
 });
