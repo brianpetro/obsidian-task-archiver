@@ -52,56 +52,6 @@ class MockVault {
     }
 }
 
-const vault = new MockVault(vaultState);
-
-const workspace = {
-    getActiveFile: () => activeFile,
-};
-
-// todo: too much vaultState.get(activeFile)
-
-class MockEditor {
-    constructor(vaultState) {
-        this.vaultState = vaultState;
-    }
-
-    getValue() {
-        return this.vaultState.get(activeFile).join("\n");
-    }
-
-    setValue(value) {
-        this.vaultState.set(activeFile, value.split("\n"));
-    }
-
-    getCursor() {
-        return {
-            line: 0,
-            ch: 0,
-        };
-    }
-
-    getLine(n) {
-        return this.vaultState.get(activeFile)[n];
-    }
-
-    lastLine() {
-        return this.vaultState.get(activeFile).length - 1;
-    }
-
-    getRange(from, to) {
-        return this.vaultState
-            .get(activeFile)
-            .slice(from.line, to.line + 1)
-            .join("\n");
-    }
-
-    replaceRange(replacement, from, to) {
-        return this.vaultState
-            .get(activeFile)
-            .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
-    }
-}
-
 const editor = {
     getValue: () => vaultState.get(activeFile).join("\n"),
     setValue: (value) => vaultState.set(activeFile, value.split("\n")),
@@ -157,8 +107,12 @@ function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     vaultState.set(activeFile, input);
     vaultState.set(archiveFile, [""]);
 
+    const workspace = {
+        getActiveFile: () => activeFile,
+    };
+
     return new Archiver(
-        vault,
+        new MockVault(vaultState),
         workspace,
         new SectionParser(new BlockParser(settings.indentationSettings)),
         new DateTreeResolver(settings),
@@ -191,7 +145,7 @@ describe("Moving top-level tasks to the archive", () => {
         )
     );
 
-    test("Moves a single task to an empty archive", async () => {
+    test.only("Moves a single task to an empty archive", async () => {
         await archiveTasksAndCheckActiveFile(
             ["- [x] foo", "- [ ] bar", "# Archived"],
             ["- [ ] bar", "# Archived", "", "- [x] foo", ""]
