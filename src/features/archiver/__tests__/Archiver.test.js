@@ -35,8 +35,9 @@ const activeFile = buildMarkdownTFile();
 const archiveFile = buildMarkdownTFile();
 
 class MockVault {
-    constructor(vaultState) {
+    constructor(vaultState, archiveFile) {
         this.vaultState = vaultState;
+        this.archiveFile = archiveFile;
     }
 
     read(file) {
@@ -48,32 +49,51 @@ class MockVault {
     }
 
     getAbstractFileByPath() {
-        return archiveFile;
+        return this.archiveFile;
     }
 }
 
-const editor = {
-    getValue: () => vaultState.get(activeFile).join("\n"),
-    setValue: (value) => vaultState.set(activeFile, value.split("\n")),
-    getCursor: () => {
-        return {
-            line: 0,
-            ch: 0,
-        };
-    },
-    getLine: (n) => vaultState.get(activeFile)[n],
-    lastLine: () => vaultState.get(activeFile).length - 1,
-    getRange: (from, to) =>
-        vaultState
+class MockEditor {
+    constructor(vaultState, cursor = { line: 0, ch: 0 }) {
+        this.vaultState = vaultState;
+        this.cursor = cursor;
+    }
+
+    getValue() {
+        return this.vaultState.get(activeFile).join("\n");
+    }
+
+    setValue(value) {
+        this.vaultState.set(activeFile, value.split("\n"));
+    }
+
+    getCursor() {
+        return this.cursor;
+    }
+
+    getLine(n) {
+        return this.vaultState.get(activeFile)[n];
+    }
+
+    lastLine() {
+        return this.vaultState.get(activeFile).length - 1;
+    }
+
+    getRange(from, to) {
+        return this.vaultState
             .get(activeFile)
             .slice(from.line, to.line + 1)
-            .join("\n"),
-    replaceRange: (replacement, from, to) => {
-        vaultState
+            .join("\n");
+    }
+
+    replaceRange(replacement, from, to) {
+        this.vaultState
             .get(activeFile)
             .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
-    },
-};
+    }
+}
+
+const editor = new MockEditor(vaultState);
 
 beforeEach(() => {
     vaultState.clear();
@@ -98,21 +118,19 @@ async function archiveTasksAndCheckActiveFile(
 }
 
 async function archiveCompletedTasks(input, settings = DEFAULT_SETTINGS) {
+    setUpVaultState(input);
     const archiver = buildArchiver(input, settings);
     return await archiver.archiveTasksInActiveFile(new EditorFile(editor));
 }
 
 function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     // TODO: this is out of place
-    vaultState.set(activeFile, input);
-    vaultState.set(archiveFile, [""]);
-
     const workspace = {
         getActiveFile: () => activeFile,
     };
 
     return new Archiver(
-        new MockVault(vaultState),
+        new MockVault(vaultState, archiveFile),
         workspace,
         new SectionParser(new BlockParser(settings.indentationSettings)),
         new DateTreeResolver(settings),
@@ -120,7 +138,13 @@ function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     );
 }
 
+function setUpVaultState(input) {
+    vaultState.set(activeFile, input);
+    vaultState.set(archiveFile, [""]);
+}
+
 async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
+    setUpVaultState(input);
     const archiver = buildArchiver(input, settings);
     return await archiver.deleteTasksInActiveFile(new EditorFile(editor));
 }
@@ -145,7 +169,7 @@ describe("Moving top-level tasks to the archive", () => {
         )
     );
 
-    test.only("Moves a single task to an empty archive", async () => {
+    test("Moves a single task to an empty archive", async () => {
         await archiveTasksAndCheckActiveFile(
             ["- [x] foo", "- [ ] bar", "# Archived"],
             ["- [ ] bar", "# Archived", "", "- [x] foo", ""]
@@ -513,6 +537,7 @@ async function archiveHeadingAndCheckActiveFile(
 }
 
 async function archiveHeading(input, settings) {
+    setUpVaultState(input);
     const archiver = buildArchiver(input, settings);
     await archiver.archiveHeadingUnderCursor(editor);
 }
@@ -534,15 +559,13 @@ describe("Archive heading under cursor", () => {
 
     test("Nested heading", async () => {
         const lines = ["# h1", "## h2", "text", "# Archived", ""];
+        setUpVaultState(lines);
 
         const archiver = buildArchiver(lines, DEFAULT_SETTINGS);
 
-        await archiver.archiveHeadingUnderCursor({
-            ...editor,
-            getCursor: () => {
-                return { line: 2, ch: 0 };
-            },
-        });
+        await archiver.archiveHeadingUnderCursor(
+            new MockEditor(vaultState, { line: 2, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual([
             "# h1",
@@ -713,12 +736,9 @@ describe("Turn list items into headings", () => {
             "\t- li 2",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings({
-            ...editor,
-            getCursor: () => {
-                return { line: 1, ch: 0 };
-            },
-        });
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, { line: 1, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
     });
@@ -732,12 +752,9 @@ describe("Turn list items into headings", () => {
             "\t\t\t\t\t- li 6",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings({
-            ...editor,
-            getCursor: () => {
-                return { line: 2, ch: 0 };
-            },
-        });
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, { line: 2, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
@@ -759,12 +776,9 @@ describe("Turn list items into headings", () => {
             "- li 1",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings({
-            ...editor,
-            getCursor: () => {
-                return { line: 2, ch: 0 };
-            },
-        });
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, { line: 2, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
     });
@@ -797,12 +811,9 @@ describe("Turn list items into headings", () => {
             "\t\t\t  Text content 2",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings({
-            ...editor,
-            getCursor: () => {
-                return { line: 3, ch: 0 };
-            },
-        });
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, { line: 3, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
@@ -845,12 +856,9 @@ describe("Turn list items into headings", () => {
             }
         );
 
-        listToHeadingTransformer.turnListItemsIntoHeadings({
-            ...editor,
-            getCursor: () => {
-                return { line: 2, ch: 0 };
-            },
-        });
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, { line: 2, ch: 0 })
+        );
 
         expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
