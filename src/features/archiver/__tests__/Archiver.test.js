@@ -98,7 +98,7 @@ beforeEach(() => {
 });
 
 function buildMarkdownTFile() {
-    // This is needed pass `instanceof` checks
+    // This is needed to pass `instanceof` checks
     const TFile = jest.requireMock("obsidian").TFile;
     const file = Object.create(TFile.prototype);
 
