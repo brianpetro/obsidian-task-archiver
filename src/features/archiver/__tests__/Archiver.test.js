@@ -54,17 +54,19 @@ class MockVault {
 }
 
 class MockEditor {
-    constructor(vaultState, cursor = { line: 0, ch: 0 }) {
+    // todo: ref to global variable
+    constructor(vaultState, activeFile = activeFile, cursor = { line: 0, ch: 0 }) {
+        this.activeFile = activeFile;
         this.vaultState = vaultState;
         this.cursor = cursor;
     }
 
     getValue() {
-        return this.vaultState.get(activeFile).join("\n");
+        return this.vaultState.get(this.activeFile).join("\n");
     }
 
     setValue(value) {
-        this.vaultState.set(activeFile, value.split("\n"));
+        this.vaultState.set(this.activeFile, value.split("\n"));
     }
 
     getCursor() {
@@ -72,23 +74,23 @@ class MockEditor {
     }
 
     getLine(n) {
-        return this.vaultState.get(activeFile)[n];
+        return this.vaultState.get(this.activeFile)[n];
     }
 
     lastLine() {
-        return this.vaultState.get(activeFile).length - 1;
+        return this.vaultState.get(this.activeFile).length - 1;
     }
 
     getRange(from, to) {
         return this.vaultState
-            .get(activeFile)
+            .get(this.activeFile)
             .slice(from.line, to.line + 1)
             .join("\n");
     }
 
     replaceRange(replacement, from, to) {
         this.vaultState
-            .get(activeFile)
+            .get(this.activeFile)
             .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
     }
 }
@@ -143,33 +145,82 @@ function setUpVaultState(input) {
     vaultState.set(archiveFile, [""]);
 }
 
-async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
-    setUpVaultState(input);
-    const archiver = buildArchiver(input, settings);
-    return await archiver.deleteTasksInActiveFile(
-        new EditorFile(new MockEditor(vaultState))
-    );
-}
+class TestHarness {
+    constructor(activeFileState) {
+        this.activeFile = buildMarkdownTFile();
+        this.archiveFile = buildMarkdownTFile();
+        this.vaultState = new Map([
+            [this.activeFile, activeFileState],
+            [this.archiveFile, [""]],
+        ]);
+        this.mockWorkspace = {
+            getActiveFile: () => this.activeFile,
+        };
+        this.editorFile = new EditorFile(
+            new MockEditor(this.vaultState, this.activeFile)
+        );
+    }
 
-function testFnAsyncArchiveTasksAndCheckActiveFile(
-    input,
-    expectedOutput,
-    settings = DEFAULT_SETTINGS
-) {
-    return async () => {
-        await archiveCompletedTasks(input, settings);
-        expect(vaultState.get(activeFile)).toEqual(expectedOutput);
-    };
+    buildArchiver() {
+        return new Archiver(
+            new MockVault(this.vaultState, this.archiveFile),
+            this.mockWorkspace,
+            new SectionParser(new BlockParser(DEFAULT_SETTINGS.indentationSettings)),
+            new DateTreeResolver(DEFAULT_SETTINGS),
+            DEFAULT_SETTINGS
+        );
+    }
+
+    assertActiveFileStateEquals(expected) {
+        expect(this.vaultState.get(this.activeFile)).toEqual(expected);
+    }
 }
 
 describe("Moving top-level tasks to the archive", () => {
-    test(
-        "Only normalizes whitespace when there are no completed tasks",
-        testFnAsyncArchiveTasksAndCheckActiveFile(
-            ["foo", "bar", "# Archived"],
-            ["foo", "bar", "# Archived", ""]
-        )
-    );
+    test.only("Only normalizes whitespace when there are no completed tasks", async () => {
+        const input = ["foo", "bar", "# Archived"];
+        const expectedOutput = ["foo", "bar", "# Archived", ""];
+
+        const testHarness = new TestHarness(input);
+        const archiver = testHarness.buildArchiver();
+
+        await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+
+        testHarness.assertActiveFileStateEquals(expectedOutput);
+
+        // const input = ["foo", "bar", "# Archived"];
+        // const expectedOutput = ["foo", "bar", "# Archived", ""];
+        //
+        // const activeFile = buildMarkdownTFile();
+        // const archiveFile = buildMarkdownTFile();
+        // const vaultState = new Map([
+        //     [activeFile, input],
+        //     [archiveFile, [""]],
+        // ]);
+        //
+        // const workspace = {
+        //     getActiveFile: () => activeFile,
+        // };
+        //
+        // const archiver = new Archiver(
+        //     new MockVault(vaultState, archiveFile),
+        //     workspace,
+        //     new SectionParser(new BlockParser(DEFAULT_SETTINGS.indentationSettings)),
+        //     new DateTreeResolver(DEFAULT_SETTINGS),
+        //     DEFAULT_SETTINGS
+        // );
+        //
+        // const editorFile = new EditorFile(new MockEditor(vaultState, activeFile));
+        //
+        // await archiver.archiveTasksInActiveFile(editorFile);
+        //
+        // expect(vaultState.get(activeFile)).toEqual(expectedOutput);
+
+        // await archiveTasksAndCheckActiveFile(
+        //     ["foo", "bar", "# Archived"],
+        //     ["foo", "bar", "# Archived", ""]
+        // );
+    });
 
     test("Moves a single task to an empty archive", async () => {
         await archiveTasksAndCheckActiveFile(
@@ -339,6 +390,14 @@ describe("Moving top-level tasks to the archive", () => {
         });
     });
 });
+
+async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
+    setUpVaultState(input);
+    const archiver = buildArchiver(input, settings);
+    return await archiver.deleteTasksInActiveFile(
+        new EditorFile(new MockEditor(vaultState))
+    );
+}
 
 describe("Deleting completed tasks", () => {
     test("Deletes completed tasks", async () => {
