@@ -1,11 +1,5 @@
+import { DEFAULT_SETTINGS, TestHarness } from "./Common.test";
 import moment from "moment";
-import { Archiver } from "../Archiver";
-import { SectionParser } from "../../../parser/SectionParser";
-import { DateTreeResolver } from "../DateTreeResolver";
-import { BlockParser } from "../../../parser/BlockParser";
-import { EditorFile } from "../../../ActiveFile";
-import { TaskListSorter } from "../../TaskListSorter";
-import { ListToHeadingTransformer } from "../../ListToHeadingTransformer";
 
 window.moment = moment;
 const WEEK = "2021-01-W-1";
@@ -13,169 +7,6 @@ const DAY = "2021-01-01";
 Date.now = () => new Date(DAY).getTime();
 
 jest.mock("obsidian");
-
-const DEFAULT_SETTINGS = {
-    archiveHeading: "Archived",
-    archiveHeadingDepth: 1,
-    weeklyNoteFormat: "YYYY-MM-[W]-w",
-    useWeeks: false,
-    dailyNoteFormat: "YYYY-MM-DD",
-    useDays: false,
-    addNewlinesAroundHeadings: true,
-    indentationSettings: {
-        useTab: true,
-        tabSize: 4,
-    },
-    archiveToSeparateFile: false,
-    defaultArchiveFileName: "<filename> (archive)",
-};
-
-const vaultState = new Map();
-const activeFile = buildMarkdownTFile();
-const archiveFile = buildMarkdownTFile();
-
-class MockVault {
-    constructor(vaultState, archiveFile) {
-        this.vaultState = vaultState;
-        this.archiveFile = archiveFile;
-    }
-
-    read(file) {
-        return this.vaultState.get(file).join("\n");
-    }
-
-    modify(file, contents) {
-        this.vaultState.set(file, contents.split("\n"));
-    }
-
-    getAbstractFileByPath() {
-        return this.archiveFile;
-    }
-}
-
-class MockEditor {
-    // todo: ref to global variable
-    constructor(vaultState, activeFile, cursor = { line: 0, ch: 0 }) {
-        this.activeFile = activeFile;
-        this.vaultState = vaultState;
-        this.cursor = cursor;
-    }
-
-    getValue() {
-        return this.vaultState.get(this.activeFile).join("\n");
-    }
-
-    setValue(value) {
-        this.vaultState.set(this.activeFile, value.split("\n"));
-    }
-
-    getCursor() {
-        return this.cursor;
-    }
-
-    getLine(n) {
-        return this.vaultState.get(this.activeFile)[n];
-    }
-
-    lastLine() {
-        return this.vaultState.get(this.activeFile).length - 1;
-    }
-
-    getRange(from, to) {
-        return this.vaultState
-            .get(this.activeFile)
-            .slice(from.line, to.line + 1)
-            .join("\n");
-    }
-
-    replaceRange(replacement, from, to) {
-        this.vaultState
-            .get(this.activeFile)
-            .splice(from.line, to.line - from.line + 1, ...replacement.split("\n"));
-    }
-}
-
-// todo: delete
-beforeEach(() => {
-    vaultState.clear();
-});
-
-function buildMarkdownTFile() {
-    // This is needed to pass `instanceof` checks
-    const TFile = jest.requireMock("obsidian").TFile;
-    const file = Object.create(TFile.prototype);
-
-    file.extension = "md";
-    return file;
-}
-
-// todo: delete
-function buildArchiver(input, settings = DEFAULT_SETTINGS) {
-    // TODO: this is out of place
-    const workspace = {
-        getActiveFile: () => activeFile,
-    };
-
-    return new Archiver(
-        new MockVault(vaultState, archiveFile),
-        workspace,
-        new SectionParser(new BlockParser(settings.indentationSettings)),
-        new DateTreeResolver(settings),
-        settings
-    );
-}
-
-// todo: delete
-function setUpVaultState(input) {
-    vaultState.set(activeFile, input);
-    vaultState.set(archiveFile, [""]);
-}
-
-class TestHarness {
-    constructor(activeFileState, settings) {
-        // todo: store file state in the file itself
-        this.activeFile = buildMarkdownTFile();
-        this.archiveFile = buildMarkdownTFile();
-        this.vaultState = new Map([
-            [this.activeFile, activeFileState],
-            [this.archiveFile, [""]],
-        ]);
-        this.mockWorkspace = {
-            getActiveFile: () => this.activeFile,
-        };
-        this.editorFile = new EditorFile(
-            new MockEditor(this.vaultState, this.activeFile)
-        );
-        this.settings = settings;
-    }
-
-    buildArchiver() {
-        return new Archiver(
-            new MockVault(this.vaultState, this.archiveFile),
-            this.mockWorkspace,
-            new SectionParser(new BlockParser(this.settings.indentationSettings)),
-            new DateTreeResolver(this.settings),
-            this.settings
-        );
-    }
-
-    expectActiveFileStateToEqual(expected) {
-        expect(this.vaultState.get(this.activeFile)).toEqual(expected);
-    }
-
-    expectArchiveFileStateToEqual(expected) {
-        expect(this.vaultState.get(this.archiveFile)).toEqual(expected);
-    }
-}
-
-async function archiveTasks(activeFileState, settings) {
-    const testHarness = new TestHarness(activeFileState, settings);
-    const archiver = testHarness.buildArchiver();
-
-    const message = await archiver.archiveTasksInActiveFile(testHarness.editorFile);
-
-    return [testHarness, message];
-}
 
 async function archiveTasksAndCheckMessage(activeFileState, expectedMessage) {
     const [, message] = await archiveTasks(activeFileState, DEFAULT_SETTINGS);
@@ -189,6 +20,15 @@ async function archiveTasksAndCheckActiveFile(
 ) {
     const [testHarness] = await archiveTasks(activeFileState, settings);
     testHarness.expectActiveFileStateToEqual(expectedActiveFileState);
+}
+
+async function archiveTasks(activeFileState, settings) {
+    const testHarness = new TestHarness(activeFileState, settings);
+    const archiver = testHarness.buildArchiver();
+
+    const message = await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+
+    return [testHarness, message];
 }
 
 describe("Moving top-level tasks to the archive", () => {
@@ -543,38 +383,56 @@ describe("Date tree", () => {
     });
 });
 
-async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
-    setUpVaultState(input);
-    const archiver = buildArchiver(input, settings);
-    return await archiver.deleteTasksInActiveFile(
-        new EditorFile(new MockEditor(vaultState, activeFile))
-    );
+// todo: duplication
+async function deleteTasksAndCheckActiveFile(
+    activeFileState,
+    expectedActiveFileState,
+    settings = DEFAULT_SETTINGS
+) {
+    const [testHarness] = await deleteTasks(activeFileState, settings);
+    testHarness.expectActiveFileStateToEqual(expectedActiveFileState);
+}
+
+// todo: duplication
+async function deleteTasks(activeFileState, settings) {
+    const testHarness = new TestHarness(activeFileState, settings);
+    const archiver = testHarness.buildArchiver();
+
+    const message = await archiver.deleteTasksInActiveFile(testHarness.editorFile);
+
+    return [testHarness, message];
 }
 
 describe("Deleting completed tasks", () => {
     test("Deletes completed tasks", async () => {
-        const input = ["- [x] foo", "- [ ] bar"];
-
-        await deleteCompletedTasks(input);
-
-        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
+        await deleteTasksAndCheckActiveFile(["- [x] foo", "- [ ] bar"], ["- [ ] bar"]);
     });
 });
 
+// todo: duplication
 async function archiveHeadingAndCheckActiveFile(
-    input,
-    expectedOutput,
+    activeFileState,
+    expectedActiveFileState,
+    cursor = { line: 0, ch: 0 },
     settings = DEFAULT_SETTINGS
 ) {
-    await archiveHeading(input, settings);
-
-    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
+    const testHarness = await archiveHeading(activeFileState, cursor, settings);
+    testHarness.expectActiveFileStateToEqual(expectedActiveFileState);
 }
 
-async function archiveHeading(input, settings) {
-    setUpVaultState(input);
-    const archiver = buildArchiver(input, settings);
-    await archiver.archiveHeadingUnderCursor(new MockEditor(vaultState, activeFile));
+// todo: duplication
+async function archiveHeading(
+    activeFileState,
+    cursor = { line: 0, ch: 0 },
+    settings = DEFAULT_SETTINGS
+) {
+    const testHarness = new TestHarness(activeFileState, settings);
+    const archiver = testHarness.buildArchiver();
+
+    testHarness.editor.cursor = cursor;
+    await archiver.archiveHeadingUnderCursor(testHarness.editor);
+
+    return testHarness;
 }
 
 describe("Archive heading under cursor", () => {
@@ -593,23 +451,11 @@ describe("Archive heading under cursor", () => {
     });
 
     test("Nested heading", async () => {
-        const lines = ["# h1", "## h2", "text", "# Archived", ""];
-        setUpVaultState(lines);
-
-        const archiver = buildArchiver(lines, DEFAULT_SETTINGS);
-
-        await archiver.archiveHeadingUnderCursor(
-            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
+        await archiveHeadingAndCheckActiveFile(
+            ["# h1", "## h2", "text", "# Archived", ""],
+            ["# h1", "", "# Archived", "", "## h2", "text"],
+            { line: 2, ch: 0 }
         );
-
-        expect(vaultState.get(activeFile)).toEqual([
-            "# h1",
-            "",
-            "# Archived",
-            "",
-            "## h2",
-            "text",
-        ]);
     });
 
     test("No heading under cursor", async () => {
@@ -617,334 +463,16 @@ describe("Archive heading under cursor", () => {
     });
 
     test("Moves to separate file", async () => {
-        await archiveHeading(["# h1", "# Archived", ""], {
-            ...DEFAULT_SETTINGS,
-            archiveToSeparateFile: true,
-        });
+        const testHarness = await archiveHeading(
+            ["# h1", "# Archived", ""],
+            undefined,
+            {
+                ...DEFAULT_SETTINGS,
+                archiveToSeparateFile: true,
+            }
+        );
 
         // TODO: whitespace inconsistency
-        expect(vaultState.get(archiveFile)).toEqual(["", "# Archived", "## h1"]);
-    });
-});
-
-function sortListUnderCursorAndCheckActiveFile(
-    input,
-    expectedOutput,
-    settings = DEFAULT_SETTINGS
-) {
-    const taskListSorter = buildTaskListSorter(input, settings);
-
-    taskListSorter.sortListUnderCursor(new MockEditor(vaultState, activeFile));
-
-    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
-}
-
-function buildTaskListSorter(input, settings) {
-    vaultState.set(activeFile, input);
-
-    return new TaskListSorter(
-        new SectionParser(new BlockParser(settings.indentationSettings)),
-        settings
-    );
-}
-
-describe("Sort tasks in list under cursor recursively", () => {
-    test("No list under cursor", () => {
-        sortListUnderCursorAndCheckActiveFile(["text"], ["text"]);
-    });
-
-    test("One level of sorting, mixed entries", () => {
-        sortListUnderCursorAndCheckActiveFile(
-            [
-                "- [x] completed 1",
-                "- text 1",
-                "- [ ] incomplete 1",
-                "- text 2",
-                "- [x] completed 2",
-                "- text 3",
-            ],
-            [
-                "- text 1",
-                "- text 2",
-                "- text 3",
-                "- [ ] incomplete 1",
-                "- [x] completed 1",
-                "- [x] completed 2",
-            ]
-        );
-    });
-
-    test("Multiple levels of nesting", () => {
-        sortListUnderCursorAndCheckActiveFile(
-            [
-                "- [x] completed",
-                "\t- [x] completed",
-                "\t- [ ] incomplete",
-                "\t- text 1",
-                "- [ ] incomplete",
-                "\t- text",
-                "\t\t- [x] completed",
-                "\t\t- text",
-            ],
-            [
-                "- [ ] incomplete",
-                "\t- text",
-                "\t\t- text",
-                "\t\t- [x] completed",
-                "- [x] completed",
-                "\t- text 1",
-                "\t- [ ] incomplete",
-                "\t- [x] completed",
-            ]
-        );
-    });
-
-    test("Text under list item", () => {
-        sortListUnderCursorAndCheckActiveFile(
-            [
-                "- [ ] incomplete",
-                "  text under list item",
-                "  text under list item 2",
-                "- text",
-                "\t- text",
-                "\t\t- [x] completed",
-                "\t\t  text under list item",
-                "\t\t  text under list item 2",
-                "\t\t- text",
-            ],
-            [
-                "- text",
-                "\t- text",
-                "\t\t- text",
-                "\t\t- [x] completed",
-                "\t\t  text under list item",
-                "\t\t  text under list item 2",
-                "- [ ] incomplete",
-                "  text under list item",
-                "  text under list item 2",
-            ]
-        );
-    });
-});
-
-function buildListToHeadingTransformer(input, settings = DEFAULT_SETTINGS) {
-    // TODO: this is out of place
-    vaultState.set(activeFile, input);
-
-    return new ListToHeadingTransformer(
-        new SectionParser(new BlockParser(settings.indentationSettings)),
-        settings
-    );
-}
-
-describe("Turn list items into headings", () => {
-    test("No list under cursor", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(["text"]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["text"]);
-    });
-
-    test("Single list line", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(["- li"]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
-    });
-
-    test("One level of nesting, cursor at line 0", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "- li",
-            "\t- li 2",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", "", "- li 2", ""]);
-    });
-
-    test("One level of nesting, cursor at nested list line", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "- li",
-            "\t- li 2",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile, { line: 1, ch: 0 })
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
-    });
-
-    test("Multiple levels of nesting, cursor in mid depth", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "- li 1",
-            "\t- li 2",
-            "\t\t- li 3",
-            "\t\t\t\t- li 4",
-            "\t\t\t\t\t- li 6",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
-        );
-
-        expect(vaultState.get(activeFile)).toEqual([
-            "# li 1",
-            "",
-            "## li 2",
-            "",
-            "### li 3",
-            "",
-            "- li 4",
-            "\t- li 6",
-            "",
-        ]);
-    });
-
-    test("Heading above list determines starting depth", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "# h 1",
-            "",
-            "- li 1",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
-    });
-
-    test("Text after list item", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "- li 1",
-            "  Text content 1",
-            "  Text content 2",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual([
-            "# li 1",
-            "",
-            "Text content 1",
-            "Text content 2",
-            "",
-        ]);
-    });
-
-    test("Text after deeply nested list item", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "- li 1",
-            "\t- li 2",
-            "\t\t- li 3",
-            "\t\t\t- li 4",
-            "\t\t\t  Text content 1",
-            "\t\t\t  Text content 2",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile, { line: 3, ch: 0 })
-        );
-
-        expect(vaultState.get(activeFile)).toEqual([
-            "# li 1",
-            "",
-            "## li 2",
-            "",
-            "### li 3",
-            "",
-            "#### li 4",
-            "",
-            "Text content 1",
-            "Text content 2",
-            "",
-        ]);
-    });
-
-    test("Respects newline settings", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(
-            ["- li 1", "\t- li 2", "\t\t- li 3"],
-            {
-                ...DEFAULT_SETTINGS,
-                addNewlinesAroundHeadings: false,
-            }
-        );
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
-    });
-
-    test("Respects indentation settings", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(
-            ["- li 1", "    - li 2", "        - li 3"],
-            {
-                ...DEFAULT_SETTINGS,
-                indentationSettings: {
-                    useTab: false,
-                    tabSize: 4,
-                },
-            }
-        );
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
-        );
-
-        expect(vaultState.get(activeFile)).toEqual([
-            "# li 1",
-            "",
-            "## li 2",
-            "",
-            "### li 3",
-            "",
-        ]);
-    });
-
-    test("Tasks in list", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(["- [x] li"]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
-    });
-
-    test("Numbered lists", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer(["11. li"]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
-    });
-
-    test("Different list tokens", () => {
-        const listToHeadingTransformer = buildListToHeadingTransformer([
-            "* li",
-            "\t+ li 2",
-        ]);
-
-        listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, activeFile)
-        );
-
-        expect(vaultState.get(activeFile)).toEqual(["# li", "", "+ li 2", ""]);
+        testHarness.expectArchiveFileStateToEqual(["", "# Archived", "## h1"]);
     });
 });
