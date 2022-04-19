@@ -168,11 +168,18 @@ class TestHarness {
     }
 }
 
-async function archiveTasksAndGetMessage(activeFileState) {
-    const testHarness = new TestHarness(activeFileState, DEFAULT_SETTINGS);
+async function archiveTasks(activeFileState, settings) {
+    const testHarness = new TestHarness(activeFileState, settings);
     const archiver = testHarness.buildArchiver();
 
-    return await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+    const message = await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+
+    return [testHarness, message];
+}
+
+async function archiveTasksAndCheckMessage(activeFileState, expectedMessage) {
+    const [, message] = await archiveTasks(activeFileState, DEFAULT_SETTINGS);
+    expect(message).toEqual(expectedMessage);
 }
 
 async function archiveTasksAndCheckActiveFile(
@@ -180,11 +187,7 @@ async function archiveTasksAndCheckActiveFile(
     expectedActiveFileState,
     settings = DEFAULT_SETTINGS
 ) {
-    const testHarness = new TestHarness(activeFileState, settings);
-    const archiver = testHarness.buildArchiver();
-
-    await archiver.archiveTasksInActiveFile(testHarness.editorFile);
-
+    const [testHarness] = await archiveTasks(activeFileState, settings);
     testHarness.expectActiveFileStateToEqual(expectedActiveFileState);
 }
 
@@ -266,7 +269,7 @@ describe("Moving top-level tasks to the archive", () => {
     ])(
         "Reports the number of top-level archived tasks: %s -> %s",
         async (input, expected) => {
-            expect(await archiveTasksAndGetMessage(input)).toBe(expected);
+            await archiveTasksAndCheckMessage(input, expected);
         }
     );
 
@@ -366,14 +369,10 @@ describe("Moving top-level tasks to the archive", () => {
 
 describe("Separate files", () => {
     test("Creates a new archive in a separate file", async () => {
-        const activeFileState = ["- [x] foo", "- [ ] bar"];
-        const testHarness = new TestHarness(activeFileState, {
+        const [testHarness] = await archiveTasks(["- [x] foo", "- [ ] bar"], {
             ...DEFAULT_SETTINGS,
             archiveToSeparateFile: true,
         });
-        const archiver = testHarness.buildArchiver();
-
-        await archiver.archiveTasksInActiveFile(testHarness.editorFile);
 
         testHarness.expectActiveFileStateToEqual(["- [ ] bar"]);
         testHarness.expectArchiveFileStateToEqual([
