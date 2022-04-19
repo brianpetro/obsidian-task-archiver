@@ -55,7 +55,7 @@ class MockVault {
 
 class MockEditor {
     // todo: ref to global variable
-    constructor(vaultState, activeFile = activeFile, cursor = { line: 0, ch: 0 }) {
+    constructor(vaultState, activeFile, cursor = { line: 0, ch: 0 }) {
         this.activeFile = activeFile;
         this.vaultState = vaultState;
         this.cursor = cursor;
@@ -95,6 +95,7 @@ class MockEditor {
     }
 }
 
+// todo: delete
 beforeEach(() => {
     vaultState.clear();
 });
@@ -108,23 +109,7 @@ function buildMarkdownTFile() {
     return file;
 }
 
-async function archiveTasksAndCheckActiveFile(
-    input,
-    expectedOutput,
-    settings = DEFAULT_SETTINGS
-) {
-    await archiveCompletedTasks(input, settings);
-    expect(vaultState.get(activeFile)).toEqual(expectedOutput);
-}
-
-async function archiveCompletedTasks(input, settings = DEFAULT_SETTINGS) {
-    setUpVaultState(input);
-    const archiver = buildArchiver(input, settings);
-    return await archiver.archiveTasksInActiveFile(
-        new EditorFile(new MockEditor(vaultState))
-    );
-}
-
+// todo: delete
 function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     // TODO: this is out of place
     const workspace = {
@@ -140,13 +125,15 @@ function buildArchiver(input, settings = DEFAULT_SETTINGS) {
     );
 }
 
+// todo: delete
 function setUpVaultState(input) {
     vaultState.set(activeFile, input);
     vaultState.set(archiveFile, [""]);
 }
 
 class TestHarness {
-    constructor(activeFileState) {
+    constructor(activeFileState, settings) {
+        // todo: store file state in the file itself
         this.activeFile = buildMarkdownTFile();
         this.archiveFile = buildMarkdownTFile();
         this.vaultState = new Map([
@@ -159,67 +146,54 @@ class TestHarness {
         this.editorFile = new EditorFile(
             new MockEditor(this.vaultState, this.activeFile)
         );
+        this.settings = settings;
     }
 
     buildArchiver() {
         return new Archiver(
             new MockVault(this.vaultState, this.archiveFile),
             this.mockWorkspace,
-            new SectionParser(new BlockParser(DEFAULT_SETTINGS.indentationSettings)),
-            new DateTreeResolver(DEFAULT_SETTINGS),
-            DEFAULT_SETTINGS
+            new SectionParser(new BlockParser(this.settings.indentationSettings)),
+            new DateTreeResolver(this.settings),
+            this.settings
         );
     }
 
-    assertActiveFileStateEquals(expected) {
+    expectActiveFileStateToEqual(expected) {
         expect(this.vaultState.get(this.activeFile)).toEqual(expected);
+    }
+
+    expectArchiveFileStateToEqual(expected) {
+        expect(this.vaultState.get(this.archiveFile)).toEqual(expected);
     }
 }
 
+async function archiveTasksAndGetMessage(activeFileState) {
+    const testHarness = new TestHarness(activeFileState, DEFAULT_SETTINGS);
+    const archiver = testHarness.buildArchiver();
+
+    return await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+}
+
+async function archiveTasksAndCheckActiveFile(
+    activeFileState,
+    expectedActiveFileState,
+    settings = DEFAULT_SETTINGS
+) {
+    const testHarness = new TestHarness(activeFileState, settings);
+    const archiver = testHarness.buildArchiver();
+
+    await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+
+    testHarness.expectActiveFileStateToEqual(expectedActiveFileState);
+}
+
 describe("Moving top-level tasks to the archive", () => {
-    test.only("Only normalizes whitespace when there are no completed tasks", async () => {
-        const input = ["foo", "bar", "# Archived"];
-        const expectedOutput = ["foo", "bar", "# Archived", ""];
-
-        const testHarness = new TestHarness(input);
-        const archiver = testHarness.buildArchiver();
-
-        await archiver.archiveTasksInActiveFile(testHarness.editorFile);
-
-        testHarness.assertActiveFileStateEquals(expectedOutput);
-
-        // const input = ["foo", "bar", "# Archived"];
-        // const expectedOutput = ["foo", "bar", "# Archived", ""];
-        //
-        // const activeFile = buildMarkdownTFile();
-        // const archiveFile = buildMarkdownTFile();
-        // const vaultState = new Map([
-        //     [activeFile, input],
-        //     [archiveFile, [""]],
-        // ]);
-        //
-        // const workspace = {
-        //     getActiveFile: () => activeFile,
-        // };
-        //
-        // const archiver = new Archiver(
-        //     new MockVault(vaultState, archiveFile),
-        //     workspace,
-        //     new SectionParser(new BlockParser(DEFAULT_SETTINGS.indentationSettings)),
-        //     new DateTreeResolver(DEFAULT_SETTINGS),
-        //     DEFAULT_SETTINGS
-        // );
-        //
-        // const editorFile = new EditorFile(new MockEditor(vaultState, activeFile));
-        //
-        // await archiver.archiveTasksInActiveFile(editorFile);
-        //
-        // expect(vaultState.get(activeFile)).toEqual(expectedOutput);
-
-        // await archiveTasksAndCheckActiveFile(
-        //     ["foo", "bar", "# Archived"],
-        //     ["foo", "bar", "# Archived", ""]
-        // );
+    test("Only normalizes whitespace when there are no completed tasks", async () => {
+        await archiveTasksAndCheckActiveFile(
+            ["foo", "bar", "# Archived"],
+            ["foo", "bar", "# Archived", ""]
+        );
     });
 
     test("Moves a single task to an empty archive", async () => {
@@ -292,8 +266,7 @@ describe("Moving top-level tasks to the archive", () => {
     ])(
         "Reports the number of top-level archived tasks: %s -> %s",
         async (input, expected) => {
-            const message = await archiveCompletedTasks(input);
-            expect(message).toBe(expected);
+            expect(await archiveTasksAndGetMessage(input)).toBe(expected);
         }
     );
 
@@ -391,35 +364,19 @@ describe("Moving top-level tasks to the archive", () => {
     });
 });
 
-async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
-    setUpVaultState(input);
-    const archiver = buildArchiver(input, settings);
-    return await archiver.deleteTasksInActiveFile(
-        new EditorFile(new MockEditor(vaultState))
-    );
-}
-
-describe("Deleting completed tasks", () => {
-    test("Deletes completed tasks", async () => {
-        const input = ["- [x] foo", "- [ ] bar"];
-
-        await deleteCompletedTasks(input);
-
-        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
-    });
-});
-
 describe("Separate files", () => {
     test("Creates a new archive in a separate file", async () => {
-        const input = ["- [x] foo", "- [ ] bar"];
-
-        await archiveCompletedTasks(input, {
+        const activeFileState = ["- [x] foo", "- [ ] bar"];
+        const testHarness = new TestHarness(activeFileState, {
             ...DEFAULT_SETTINGS,
             archiveToSeparateFile: true,
         });
+        const archiver = testHarness.buildArchiver();
 
-        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
-        expect(vaultState.get(archiveFile)).toEqual([
+        await archiver.archiveTasksInActiveFile(testHarness.editorFile);
+
+        testHarness.expectActiveFileStateToEqual(["- [ ] bar"]);
+        testHarness.expectArchiveFileStateToEqual([
             "",
             "# Archived",
             "",
@@ -587,6 +544,24 @@ describe("Date tree", () => {
     });
 });
 
+async function deleteCompletedTasks(input, settings = DEFAULT_SETTINGS) {
+    setUpVaultState(input);
+    const archiver = buildArchiver(input, settings);
+    return await archiver.deleteTasksInActiveFile(
+        new EditorFile(new MockEditor(vaultState, activeFile))
+    );
+}
+
+describe("Deleting completed tasks", () => {
+    test("Deletes completed tasks", async () => {
+        const input = ["- [x] foo", "- [ ] bar"];
+
+        await deleteCompletedTasks(input);
+
+        expect(vaultState.get(activeFile)).toEqual(["- [ ] bar"]);
+    });
+});
+
 async function archiveHeadingAndCheckActiveFile(
     input,
     expectedOutput,
@@ -600,7 +575,7 @@ async function archiveHeadingAndCheckActiveFile(
 async function archiveHeading(input, settings) {
     setUpVaultState(input);
     const archiver = buildArchiver(input, settings);
-    await archiver.archiveHeadingUnderCursor(new MockEditor(vaultState));
+    await archiver.archiveHeadingUnderCursor(new MockEditor(vaultState, activeFile));
 }
 
 describe("Archive heading under cursor", () => {
@@ -625,7 +600,7 @@ describe("Archive heading under cursor", () => {
         const archiver = buildArchiver(lines, DEFAULT_SETTINGS);
 
         await archiver.archiveHeadingUnderCursor(
-            new MockEditor(vaultState, { line: 2, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual([
@@ -660,7 +635,7 @@ function sortListUnderCursorAndCheckActiveFile(
 ) {
     const taskListSorter = buildTaskListSorter(input, settings);
 
-    taskListSorter.sortListUnderCursor(new MockEditor(vaultState));
+    taskListSorter.sortListUnderCursor(new MockEditor(vaultState, activeFile));
 
     expect(vaultState.get(activeFile)).toEqual(expectedOutput);
 }
@@ -767,7 +742,9 @@ describe("Turn list items into headings", () => {
     test("No list under cursor", () => {
         const listToHeadingTransformer = buildListToHeadingTransformer(["text"]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["text"]);
     });
@@ -775,7 +752,9 @@ describe("Turn list items into headings", () => {
     test("Single list line", () => {
         const listToHeadingTransformer = buildListToHeadingTransformer(["- li"]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
@@ -786,7 +765,9 @@ describe("Turn list items into headings", () => {
             "\t- li 2",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", "", "- li 2", ""]);
     });
@@ -798,7 +779,7 @@ describe("Turn list items into headings", () => {
         ]);
 
         listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, { line: 1, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 1, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", "", "## li 2", ""]);
@@ -814,7 +795,7 @@ describe("Turn list items into headings", () => {
         ]);
 
         listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, { line: 2, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual([
@@ -838,7 +819,7 @@ describe("Turn list items into headings", () => {
         ]);
 
         listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, { line: 2, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual(["# h 1", "", "## li 1", ""]);
@@ -851,7 +832,9 @@ describe("Turn list items into headings", () => {
             "  Text content 2",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual([
             "# li 1",
@@ -873,7 +856,7 @@ describe("Turn list items into headings", () => {
         ]);
 
         listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, { line: 3, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 3, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual([
@@ -900,7 +883,9 @@ describe("Turn list items into headings", () => {
             }
         );
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li 1", "- li 2", "\t- li 3"]);
     });
@@ -918,7 +903,7 @@ describe("Turn list items into headings", () => {
         );
 
         listToHeadingTransformer.turnListItemsIntoHeadings(
-            new MockEditor(vaultState, { line: 2, ch: 0 })
+            new MockEditor(vaultState, activeFile, { line: 2, ch: 0 })
         );
 
         expect(vaultState.get(activeFile)).toEqual([
@@ -934,7 +919,9 @@ describe("Turn list items into headings", () => {
     test("Tasks in list", () => {
         const listToHeadingTransformer = buildListToHeadingTransformer(["- [x] li"]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
@@ -942,7 +929,9 @@ describe("Turn list items into headings", () => {
     test("Numbered lists", () => {
         const listToHeadingTransformer = buildListToHeadingTransformer(["11. li"]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", ""]);
     });
@@ -953,7 +942,9 @@ describe("Turn list items into headings", () => {
             "\t+ li 2",
         ]);
 
-        listToHeadingTransformer.turnListItemsIntoHeadings(new MockEditor(vaultState));
+        listToHeadingTransformer.turnListItemsIntoHeadings(
+            new MockEditor(vaultState, activeFile)
+        );
 
         expect(vaultState.get(activeFile)).toEqual(["# li", "", "+ li 2", ""]);
     });
