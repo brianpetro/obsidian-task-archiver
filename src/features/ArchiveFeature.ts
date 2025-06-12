@@ -1,4 +1,4 @@
-import { Editor, TFile, Vault, Workspace } from "obsidian";
+import { Editor, MetadataCache, TFile, Vault, Workspace } from "obsidian";
 
 import {
     dropRight,
@@ -67,6 +67,7 @@ export class ArchiveFeature {
     constructor(
         private readonly vault: Vault,
         private readonly workspace: Workspace,
+        private readonly metadataCache: MetadataCache,
         private readonly parser: SectionParser,
         private readonly listItemService: ListItemService,
         private readonly taskTestingService: TaskTestingService,
@@ -209,7 +210,19 @@ export class ArchiveFeature {
             : "desc";
     }
 
+    private getFrontMatter() {
+        const file = this.workspace.getActiveFile();
+        if (!file) {
+            return {};
+        }
+        return (
+            this.metadataCache.getFileCache(file)?.frontmatter ?? {}
+        ) as Record<string, unknown>;
+    }
+
     private async archiveTasks(tasks: Block[], activeFile: ActiveFile) {
+        const front_matter = this.getFrontMatter();
+        const append_metadata = this.metadataService.appendMetadata(front_matter);
         const tasksWithDestinations: Array<TaskWithResolvedDestination> = await flow(
             orderBy(({ text }) => getTaskCompletionDate(text), this.getSortOrder()),
             map(
@@ -219,7 +232,7 @@ export class ArchiveFeature {
                         task,
                         rule: this.findRuleForTask(task),
                     }),
-                    this.metadataService.appendMetadata,
+                    append_metadata,
                     this.addDestinationToTask
                 )
             ),

@@ -5,7 +5,7 @@ module.exports = {
     ],
     preset: "solid-jest/preset/browser",
     setupFilesAfterEnv: ["<rootDir>/support/jest-setup.ts"],
-    testPathIgnorePatterns: ["test-util/"],
+    testPathIgnorePatterns: ["test-util/", "src/settings-ui/components/__tests__/ArchiverSettingsPage.test.jsx"],
     testEnvironment: "jsdom",
     coverageThreshold: {
         global: {

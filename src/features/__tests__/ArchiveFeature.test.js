@@ -572,6 +572,24 @@ describe("Adding metadata to tasks", () => {
             );
         });
     });
+
+    describe("Front matter metadata", () => {
+        test("Appends front matter variables", async () => {
+            await archiveTasksAndCheckActiveFile(
+                ["---", "project: ta", "---", "- [x] foo", "# Archived"],
+                [
+                    "---",
+                    "project: ta",
+                    "---",
+                    "# Archived",
+                    "",
+                    `- [x] foo ${metadataWithResolvedPlaceholders} project:: ta`,
+                    "",
+                ],
+                { settings: settingsForTestingMetadata }
+            );
+        });
+    });
 });
 
 describe("Sort orders", () => {
