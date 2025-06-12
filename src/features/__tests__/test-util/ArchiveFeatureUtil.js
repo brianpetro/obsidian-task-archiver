@@ -8,6 +8,7 @@ function buildArchiveFeature(activeFileState, settings) {
     const archiveFeature = new ArchiveFeature(
         deps.mockVault,
         deps.mockWorkspace,
+        deps.mockMetadataCache,
         deps.sectionParser,
         deps.listItemService,
         deps.taskTestingService,

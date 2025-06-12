@@ -153,6 +153,7 @@ export default class ObsidianTaskArchiver extends Plugin {
         this.archiveFeature = new ArchiveFeature(
             this.app.vault,
             this.app.workspace,
+            this.app.metadataCache,
             parser,
             listItemService,
             taskTestingService,

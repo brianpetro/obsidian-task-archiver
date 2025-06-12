@@ -12,6 +12,8 @@ import { TaskTestingService } from "../../../services/TaskTestingService";
 import { TextReplacementService } from "../../../services/TextReplacementService";
 import { BlockParser } from "../../../services/parser/BlockParser";
 import { SectionParser } from "../../../services/parser/SectionParser";
+import { splitFrontMatter } from "../../../util/SplitFrontMatter";
+import { parse_front_matter } from "../../../util/FrontMatter";
 
 // This is needed to pass `instanceof` checks
 export function createTFile({ state = [], path }) {
@@ -45,6 +47,12 @@ export class TestDependencies {
         this.mockVault = new MockVault([this.mockArchiveFile, ...vaultFiles]);
         this.mockWorkspace = {
             getActiveFile: () => this.mockActiveFile,
+        };
+        this.mockMetadataCache = {
+            getFileCache: (file) => {
+                const [fm] = splitFrontMatter(file.state);
+                return { frontmatter: parse_front_matter(fm) };
+            },
         };
         this.mockEditor = new MockEditor(this.mockActiveFile, cursor);
         this.editorFile = new EditorFile(this.mockEditor);
