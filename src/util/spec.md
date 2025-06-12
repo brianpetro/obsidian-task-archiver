@@ -15,3 +15,6 @@ graph TD
   C --> D(front_matter_to_meta)
   D --> E[Metadata String]
 ```
+
+## pick_front_matter(front_matter, keys)
+Returns a front matter object with only the specified keys. Use `"*"` or an empty string to keep all keys.

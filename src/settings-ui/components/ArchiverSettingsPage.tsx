@@ -45,7 +45,7 @@ export function ArchiverSettingsPage(props: ArchiverSettingsPageProps) {
           const asserted = value as TaskSortOrder;
           setSettings("taskSortOrder", asserted);
         }}
-        name={"Order archived tasks"}
+        name="Order archived tasks"
         options={[TaskSortOrder.NEWEST_LAST, TaskSortOrder.NEWEST_FIRST]}
         value={settings.taskSortOrder}
       />
@@ -101,7 +101,7 @@ export function ArchiverSettingsPage(props: ArchiverSettingsPageProps) {
             onInput={({ currentTarget: { value } }) => {
               setSettings("textReplacement", "regex", value);
             }}
-            name={"Regular expression"}
+            name="Regular expression"
             value={settings.textReplacement.regex}
           />
           <TextSetting
@@ -283,6 +283,19 @@ export function ArchiverSettingsPage(props: ArchiverSettingsPageProps) {
               </>
             }
             value={settings.additionalMetadataBeforeArchiving.metadata}
+            class="wide-input"
+          />
+          <TextSetting
+            onInput={({ currentTarget: { value } }) => {
+              setSettings(
+                "additionalMetadataBeforeArchiving",
+                "frontmatterKeys",
+                value
+              );
+            }}
+            name="Front matter keys"
+            description="Comma separated keys from the note's front matter to add"
+            value={settings.additionalMetadataBeforeArchiving.frontmatterKeys}
             class="wide-input"
           />
           <PlaceholdersDescription
