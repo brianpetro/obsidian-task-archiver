@@ -16,7 +16,6 @@ export interface AdditionalMetadataSettings {
     addMetadata: boolean;
     dateFormat: string;
     metadata: string;
-    frontmatterKeys: string;
 }
 
 export enum ArchiveFileType {
@@ -105,7 +104,6 @@ export const DEFAULT_SETTINGS: Settings = {
         addMetadata: true,
         dateFormat: DEFAULT_DATE_FORMAT,
         metadata: `🔒 [[${placeholders.DATE}]] 🕸️ ${placeholders.HEADING_CHAIN}`,
-        frontmatterKeys: "*",
     },
     additionalTaskPattern: "",
     archiveAllCheckedTaskTypes: false,
@@ -141,7 +139,6 @@ export const DEFAULT_SETTINGS_FOR_TESTS: Settings = {
     additionalMetadataBeforeArchiving: {
         ...DEFAULT_SETTINGS.additionalMetadataBeforeArchiving,
         addMetadata: false,
-        frontmatterKeys: "*",
     },
     defaultArchiveFileName: "folder/sub-folder/mock-file-base-name",
     headings: [{ text: "Archived" }],
