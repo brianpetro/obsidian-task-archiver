@@ -207,7 +207,7 @@ You can use several placeholders throughout the settings to build cool workflows
     -   Resolves to the path from the root of the vault to the file you're in
 -   `{{heading}}`
     -   Points to the heading above the task
--   `{{headingChain}}`)
+-   `{{headingChain}}`
     -   Creates a chain from headings above the task. E.g. `Project 1 > Team 2`
 -   `{{frontmatter.<key>}}`
     -   Inserts the value of `<key>` from the note's front matter
@@ -225,8 +225,9 @@ A regular expression for replacing the contents of the task during archiving; th
 This might be useful if you want to see what you accomplished in a day:
 ![](metadata-demo.png)
 
-You can also pull values from the note's front matter. Specify a comma separated
-list of keys in **Front matter keys** setting. Use `*` to include all keys.
+You can pull values from the note's front matter using placeholders.
+For example:
+`[completion:: {{obsidianTasksCompletedDate}}] [impact:: {{frontmatter.impact}}]`
 
 ### Additional patterns to detect completed tasks
 

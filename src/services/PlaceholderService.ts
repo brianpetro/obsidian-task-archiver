@@ -12,6 +12,7 @@ interface PlaceholderContext {
     dateFormat?: string;
     heading?: string;
     obsidianTasksCompletedDateFormat?: string;
+    frontmatter?: Record<string, unknown>;
 }
 
 export class PlaceholderService {
@@ -54,9 +55,10 @@ export class PlaceholderService {
             dateFormat = DEFAULT_DATE_FORMAT,
             heading = "", // todo: this too is inside a task, it should be removed
             obsidianTasksCompletedDateFormat = DEFAULT_DATE_FORMAT, // todo: this can be read from settings
+            frontmatter = {},
         }: PlaceholderContext = {}
     ) {
-        return text
+        const with_basic = text
             .replace(placeholders.ACTIVE_FILE, this.getActiveFileBaseName())
             .replace(placeholders.ACTIVE_FILE_NEW, this.getActiveFileBaseName())
             .replace(
@@ -79,5 +81,9 @@ export class PlaceholderService {
                     .moment(getTaskCompletionDate(block?.text))
                     .format(obsidianTasksCompletedDateFormat)
             );
+
+        return with_basic.replace(/{{frontmatter\.([\w-]+)}}/g, (_, key) =>
+            key in frontmatter ? String(frontmatter[key]) : ""
+        );
     }
 }

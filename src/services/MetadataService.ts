@@ -2,7 +2,6 @@ import { PlaceholderService } from "./PlaceholderService";
 
 import { Settings } from "../Settings";
 import { BlockWithRule } from "../types/Types";
-import { front_matter_to_meta, pick_front_matter } from "../util/FrontMatter";
 
 export class MetadataService {
   constructor(
@@ -26,16 +25,10 @@ export class MetadataService {
         dateFormat,
         block: task,
         heading: task.parentSection.text,
+        frontmatter: front_matter,
       });
 
-      const filtered = pick_front_matter(
-        front_matter,
-        this.settings.additionalMetadataBeforeArchiving.frontmatterKeys
-      );
-      const front_matter_metadata = front_matter_to_meta(filtered);
-      const suffix = [resolved_metadata, front_matter_metadata]
-        .filter((part) => part)
-        .join(" ");
+      const suffix = resolved_metadata;
 
       task.text = `${task.text} ${suffix}`.trim();
       return { task, rule };

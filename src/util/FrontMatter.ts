@@ -33,24 +33,3 @@ export function front_matter_to_meta(front_matter: Record<string, unknown>): str
  * @param front_matter - Parsed front matter object.
  * @param keys - Comma separated list of keys to pick. Use '*' for all or leave empty for none.
  */
-export function pick_front_matter(
-  front_matter: Record<string, unknown>,
-  keys: string
-): Record<string, unknown> {
-  const trimmed = keys.trim();
-  if (trimmed === "*") {
-    return front_matter;
-  }
-  if (trimmed === "") {
-    return {};
-  }
-
-  const allowed = trimmed
-    .split(",")
-    .map((k) => k.trim())
-    .filter((k) => k);
-
-  return Object.fromEntries(
-    Object.entries(front_matter).filter(([key]) => allowed.includes(key))
-  );
-}

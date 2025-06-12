@@ -447,7 +447,6 @@ describe("Adding metadata to tasks", () => {
             ...DEFAULT_SETTINGS_FOR_TESTS.additionalMetadataBeforeArchiving,
             addMetadata: true,
             metadata,
-            frontmatterKeys: "*",
         },
     };
 
@@ -577,31 +576,14 @@ describe("Adding metadata to tasks", () => {
     describe("Front matter metadata", () => {
         test("Appends front matter variables", async () => {
             await archiveTasksAndCheckActiveFile(
-                ["---", "project: ta", "---", "- [x] foo", "# Archived"],
+                ["---", "impact: high", "---", "- [x] foo", "# Archived"],
                 [
                     "---",
-                    "project: ta",
+                    "impact: high",
                     "---",
                     "# Archived",
                     "",
-                    `- [x] foo ${metadataWithResolvedPlaceholders} project:: ta`,
-                    "",
-                ],
-                { settings: settingsForTestingMetadata }
-            );
-        });
-
-        test("Respects configured keys", async () => {
-            await archiveTasksAndCheckActiveFile(
-                ["---", "project: ta", "context: work", "---", "- [x] foo", "# Archived"],
-                [
-                    "---",
-                    "project: ta",
-                    "context: work",
-                    "---",
-                    "# Archived",
-                    "",
-                    `- [x] foo ${metadataWithResolvedPlaceholders} project:: ta`,
+                    `- [x] foo [impact:: high]`,
                     "",
                 ],
                 {
@@ -609,23 +591,23 @@ describe("Adding metadata to tasks", () => {
                         ...settingsForTestingMetadata,
                         additionalMetadataBeforeArchiving: {
                             ...settingsForTestingMetadata.additionalMetadataBeforeArchiving,
-                            frontmatterKeys: "project",
+                            metadata: "[impact:: {{frontmatter.impact}}]",
                         },
                     },
                 }
             );
         });
 
-        test("No front matter appended when keys empty", async () => {
+        test("Missing key resolves to empty string", async () => {
             await archiveTasksAndCheckActiveFile(
-                ["---", "project: ta", "---", "- [x] foo", "# Archived"],
+                ["---", "impact: high", "---", "- [x] foo", "# Archived"],
                 [
                     "---",
-                    "project: ta",
+                    "impact: high",
                     "---",
                     "# Archived",
                     "",
-                    `- [x] foo ${metadataWithResolvedPlaceholders}`,
+                    `- [x] foo [impact:: ]`,
                     "",
                 ],
                 {
@@ -633,7 +615,7 @@ describe("Adding metadata to tasks", () => {
                         ...settingsForTestingMetadata,
                         additionalMetadataBeforeArchiving: {
                             ...settingsForTestingMetadata.additionalMetadataBeforeArchiving,
-                            frontmatterKeys: "",
+                            metadata: "[impact:: {{frontmatter.missing}}]",
                         },
                     },
                 }

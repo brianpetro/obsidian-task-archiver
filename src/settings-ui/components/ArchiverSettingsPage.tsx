@@ -285,19 +285,6 @@ export function ArchiverSettingsPage(props: ArchiverSettingsPageProps) {
             value={settings.additionalMetadataBeforeArchiving.metadata}
             class="wide-input"
           />
-          <TextSetting
-            onInput={({ currentTarget: { value } }) => {
-              setSettings(
-                "additionalMetadataBeforeArchiving",
-                "frontmatterKeys",
-                value
-              );
-            }}
-            name="Front matter keys"
-            description="Comma separated keys from the note's front matter to add"
-            value={settings.additionalMetadataBeforeArchiving.frontmatterKeys}
-            class="wide-input"
-          />
           <PlaceholdersDescription
             placeholderResolver={props.placeholderService}
             extraPlaceholders={[
