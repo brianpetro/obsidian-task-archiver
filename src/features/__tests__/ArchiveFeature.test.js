@@ -447,6 +447,7 @@ describe("Adding metadata to tasks", () => {
             ...DEFAULT_SETTINGS_FOR_TESTS.additionalMetadataBeforeArchiving,
             addMetadata: true,
             metadata,
+            frontmatterKeys: "*",
         },
     };
 
@@ -587,6 +588,55 @@ describe("Adding metadata to tasks", () => {
                     "",
                 ],
                 { settings: settingsForTestingMetadata }
+            );
+        });
+
+        test("Respects configured keys", async () => {
+            await archiveTasksAndCheckActiveFile(
+                ["---", "project: ta", "context: work", "---", "- [x] foo", "# Archived"],
+                [
+                    "---",
+                    "project: ta",
+                    "context: work",
+                    "---",
+                    "# Archived",
+                    "",
+                    `- [x] foo ${metadataWithResolvedPlaceholders} project:: ta`,
+                    "",
+                ],
+                {
+                    settings: {
+                        ...settingsForTestingMetadata,
+                        additionalMetadataBeforeArchiving: {
+                            ...settingsForTestingMetadata.additionalMetadataBeforeArchiving,
+                            frontmatterKeys: "project",
+                        },
+                    },
+                }
+            );
+        });
+
+        test("No front matter appended when keys empty", async () => {
+            await archiveTasksAndCheckActiveFile(
+                ["---", "project: ta", "---", "- [x] foo", "# Archived"],
+                [
+                    "---",
+                    "project: ta",
+                    "---",
+                    "# Archived",
+                    "",
+                    `- [x] foo ${metadataWithResolvedPlaceholders}`,
+                    "",
+                ],
+                {
+                    settings: {
+                        ...settingsForTestingMetadata,
+                        additionalMetadataBeforeArchiving: {
+                            ...settingsForTestingMetadata.additionalMetadataBeforeArchiving,
+                            frontmatterKeys: "",
+                        },
+                    },
+                }
             );
         });
     });

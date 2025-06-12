@@ -1,4 +1,8 @@
-import { parse_front_matter, front_matter_to_meta } from "../FrontMatter";
+import {
+  parse_front_matter,
+  front_matter_to_meta,
+  pick_front_matter,
+} from "../FrontMatter";
 
 test("parses yaml front matter", () => {
   const lines = ["---", "foo: bar", "baz: qux", "---"];
@@ -9,4 +13,20 @@ test("parses yaml front matter", () => {
 test("converts front matter to metadata", () => {
   const meta = front_matter_to_meta({ foo: "bar", baz: "qux" });
   expect(meta).toBe("foo:: bar baz:: qux");
+});
+
+test("picks specific keys from front matter", () => {
+  const picked = pick_front_matter(
+    { foo: "bar", baz: "qux" },
+    "foo"
+  );
+  expect(picked).toEqual({ foo: "bar" });
+});
+
+test("returns all when keys empty", () => {
+  const picked = pick_front_matter(
+    { foo: "bar", baz: "qux" },
+    ""
+  );
+  expect(picked).toEqual({});
 });
